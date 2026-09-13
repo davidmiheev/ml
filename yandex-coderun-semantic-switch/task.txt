@@ -1,0 +1,102 @@
+Что нужно сделать
+Каждый эпизод содержит:
+
+восемь размеченных сообщений support: четыре с меткой 0 и четыре с меткой 1;
+четыре сообщения queries, для которых нужно предсказать метки;
+новое скрытое правило, которое может отличаться от правил в других эпизодах.
+Ваша задача — изменить Python-код только в starter/solution/. Организатор сам запустит обучение с нуля на закрытом train, заберёт получившийся adapter и в отдельном чистом процессе выполнит prediction на закрытом test.
+
+Полные train, validation и test участнику не выдаются. Файлы в examples/ — маленькие искусственные манекены для проверки формата и запуска. Они не показывают тематику, распределение или секреты настоящего корпуса. Манекен старается, но конкурс за вас не решит.
+
+Формат ввода
+Вам дан zip архив с бейзлайн решением - https://disk.yandex.ru/d/h3Q44ipc7ODOwA :
+
+starter/solution/ — код решения; его можно и нужно менять;
+starter/runtime/ — официальный runtime; его менять нельзя;
+starter/assets/ — замороженная модель, токенизатор и стартовые параметры;
+starter/tests/test_contract.py — проверка технического контракта;
+examples/ — только примеры JSONL-схемы;
+package_submission.py — сборщик итогового архива;
+requirements.txt и task_config.json — окружение и машинные ограничения.
+Чтобы сдать решение, надо собрать архив:
+python package_submission.py \
+  --source starter/solution \
+  --output submission.zip
+
+Внутри должны быть только .py-файлы по пути starter/solution/.
+Формат вывода
+Одна строка JSONL — один эпизод. В настоящих данных всегда восемь support и четыре queries. Порядок элементов и непрозрачные идентификаторы ответ не кодируют.
+
+Обучающий эпизод выглядит так:
+{
+  "episode_id": "ep_opaque",
+  "support": [
+    {"example_id": "sx_opaque", "text": "Сообщение", "label": 1}
+  ],
+  "queries": [
+    {"query_id": "qx_opaque", "text": "Сообщение", "label": 0}
+  ]
+}
+Во время prediction поле label у queries отсутствует, а размеченный support остаётся доступен. Для каждого query нужно записать отдельную строку:
+{"episode_id":"ep_opaque","query_id":"qx_opaque","label":1,"probability":0.75}
+
+Требования к prediction:
+
+label — целое число 0 или 1;
+probability — конечное число от 0 до 1;
+label равен 1 тогда и только тогда, когда probability >= 0.5;
+пропуски, дубликаты и неизвестные идентификаторы запрещены.
+Система оценивания
+Метрика
+Главная метрика — Episode Exact Match. Эпизод приносит один балл, только если правильно угаданы все четыре query. Три из четырёх — хороший повод вздохнуть, но всё ещё ноль баллов за эпизод.
+
+
+episode_correct = 1, если четыре метки верны, иначе 0
+score = (среднее episode_correct по всем эпизодам) * 100
+При ошибке формата prediction всё решение отклоняется. Организатор также может считать закрытые диагностические метрики, но итоговый score они не меняют.
+
+Ограничения
+только CPU;
+сеть отключена;
+train и predict вместе должны уложиться в 25 минут;
+backbone должен оставаться замороженным и сохранять исходный SHA-256;
+не более 150 000 обучаемых tensor scalars;
+итоговый adapter — не более 2 097 152 байт;
+исходная последовательность — не более 58 токенов;
+нельзя добавлять веса, датасеты, исполняемые или другие бинарные файлы;
+во время predict нельзя обучаться, использовать градиенты или читать train;
+из train-фазы в predict-фазу переезжает только проверенный adapter.
+CLI-аргументы модулей starter.solution.train и starter.solution.predict должны оставаться совместимыми со starter. Внутреннюю архитектуру Python-файлов в starter/solution/ можно менять.
+
+Частые ошибки
+Вердикт ML (Memory Limit Exceeded) - попробуйте уменьшить batch size
+Вердикт TL (Time Limit Exceeded) - попробуйте ограничить число train данных, либо поменяйте гиперпараметры модели
+Вердикт CRASHED/FAILED (что-то произошло с чекером) - загрузите решение заново, иногда возникает очередь за ресурсы из-за чего решение может упасть до начала тестирования
+Вердикт PE (Presentation Error) - удостоверьтесь что вы правильно собрали zip -архив
+Примечание
+Окружение и быстрый запуск
+Используй Python 3.10 и virtual environment:
+
+
+python -m pip install -r requirements.txt
+mkdir -p runs
+Модель и токенизатор уже находятся локально, поэтому сеть для запуска не нужна. Smoke-тест на искусственном примере:
+
+
+TRANSFORMERS_OFFLINE=1 HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 \
+python -m starter.solution.train \
+  --train examples/schema_train_sample.jsonl \
+  --adapter runs/smoke.safetensors \
+  --epochs 1 \
+  --batch-size 1 \
+  --seed 73
+
+TRANSFORMERS_OFFLINE=1 HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 \
+python -m starter.solution.predict \
+  --data examples/schema_evaluation_sample.jsonl \
+  --adapter runs/smoke.safetensors \
+  --output runs/smoke_predictions.jsonl \
+  --batch-size 1
+
+python -m pytest -q starter/tests/test_contract.py
+Успешный smoke-тест означает лишь то, что трубы соединены правильно. Качество на закрытом тесте он не предсказывает.
