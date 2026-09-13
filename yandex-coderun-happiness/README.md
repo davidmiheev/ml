@@ -34,6 +34,7 @@ which is what all of the solutions here optimise against. Three consequences:
     tools/gen.py   random tests matching each scenario's stated constraints
     tools/score.py validator + scorer (reproduces the statement's worked example)
     tools/run.py   generate, solve and score a scenario across seeds
+    tools/brute2.py exhaustive optimum for scenario 2, certifies that solution
 
 Solutions use only the standard library, since the judge's environment is
 unknown and the provided templates are plain Python.
@@ -45,7 +46,7 @@ unknown and the provided templates are plain Python.
 | # | Scenario | Points | Approach | State |
 |---|----------|--------|----------|-------|
 | 1 | Проверка связи | — | single forced rollout, feasibility-checked | optimal |
-| 2 | CDN на коленке | 5 | | |
+| 2 | CDN на коленке | 5 | one rollout/day, devices by weight into earliest days | optimal |
 | 3 | Две недели без доступов | 10 | | |
 | 4 | Пятничный релиз | 20 | | |
 | 5 | The Last Dance | 25 | | |
