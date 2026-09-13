@@ -35,11 +35,22 @@ which is what all of the solutions here optimise against. Three consequences:
     tools/score.py validator + scorer (reproduces the statement's worked example)
     tools/run.py   generate, solve and score a scenario across seeds
     tools/brute2.py exhaustive optimum for scenario 2, certifies that solution
+    tools/bound.py  infinite-bandwidth upper bound, to measure how much is left
+    tools/compare.py score a scenario against that bound across seeds
 
 Solutions use only the standard library, since the judge's environment is
 unknown and the provided templates are plain Python.
 
     python3 tools/run.py 3 0 1 2      # solve scenario 3 on seeds 0,1,2
+
+## Reading the numbers
+
+`tools/bound.py` drops both bandwidth limits, so it is only tight when the
+device budget is what binds. On instances where the generator puts every device
+in one house, a single 50 MB/day pipe serves the whole fleet and the plan
+saturates it -- there the solution sits at ~68% of the bound while being within
+a fraction of a percent of what a 20x longer search finds. Judge a scenario by
+the gap to a long run, and use the bound only to spot device-budget-bound cases.
 
 ## Status
 
@@ -47,7 +58,7 @@ unknown and the provided templates are plain Python.
 |---|----------|--------|----------|-------|
 | 1 | Проверка связи | — | single forced rollout, feasibility-checked | optimal |
 | 2 | CDN на коленке | 5 | one rollout/day, devices by weight into earliest days | optimal |
-| 3 | Две недели без доступов | 10 | | |
+| 3 | Две недели без доступов | 10 | relaxation-guided + greedy seeds, then annealing | ~99% of a 22x longer run |
 | 4 | Пятничный релиз | 20 | | |
 | 5 | The Last Dance | 25 | | |
 | 6 | Наследие | 40 | | |
