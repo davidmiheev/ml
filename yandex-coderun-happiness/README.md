@@ -65,5 +65,5 @@ unreachable.
 | 2 | CDN на коленке | 5 | one rollout/day, devices by weight into earliest days | optimal |
 | 3 | Две недели без доступов | 10 | relaxation-guided + greedy seeds, then annealing | ~99% of a 22x longer run |
 | 4 | Пятничный релиз | 20 | Pareto frontier + heap greedy, then annealing | ~98.5% of a 10x longer run |
-| 5 | The Last Dance | 25 | persistent-heap greedy, ranking parameter swept per instance | works; annealing ineffective at this size |
+| 5 | The Last Dance | 25 | persistent-heap greedy (model chosen by (h-cur)/(s+alpha), ordered by w(h-cur)/(s+beta)), alpha swept per instance, then ruin & recreate with jittered parameters | done; +0.4-0.8% over the previous construction in 20s (+1.1% at 120s) (`TIME_BUDGET` env var), keeps improving slowly with more time |
 | 6 | Наследие | 40 | grouped persistent-heap greedy (one heap entry per (class, held h, house limit) group), per-device class-budget plan, upgrade pass | works, valid; ~22s per instance, ~79% of the bandwidth-free bound on seed 0; tuning in progress |

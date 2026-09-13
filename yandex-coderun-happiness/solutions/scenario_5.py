@@ -27,15 +27,23 @@ Also, with sizes up to 200 and house limits from 20, nearly half of all
 (update, house) pairs can never be delivered even on a completely free day.
 Those are rejected inside the candidate search rather than retried per day.
 
-Best-solution tracking uses an undo journal rather than snapshots: copying
-10000 slot chains on every improvement would cost more than the search itself.
+The construction leaves every day full until the device budgets run out
+(~day 60), after which the server idles: bandwidth and budget bind at once.
+No single-rollout move can improve such a schedule -- adding needs room,
+moving later loses value, a happier model needs room -- and annealing over
+those moves found nothing in a minute. The search is therefore ruin & recreate:
+free the rollouts of a few devices, a house or a window of days, refill with
+the greedy under jittered ranking parameters, keep the result if no worse.
+Rejected attempts are undone through a journal rather than snapshots.
 """
 import heapq
+import os
 import random
 import sys
 import time
 
-TIME_BUDGET = 4.0
+TIME_BUDGET = float(os.environ.get("TIME_BUDGET", 20.0))
+BETA_FACTOR = 0.25   # ranking uses w*(h-cur)/(s + BETA_FACTOR*mean size)
 
 
 def main():
@@ -119,20 +127,6 @@ def main():
             last = t
         return acc * weight[i][c]
 
-    def can_add(t, i, k):
-        if used_dev[i] >= cap[i] or t < release[k] or k in on_dev[i]:
-            return False
-        sz = size[k]
-        if used_srv[t] + sz > G:
-            return False
-        m = house[i]
-        if used_house[t][m] + sz > limit[m]:
-            return False
-        for dt, _ in chain[i * C + cls[k]]:
-            if dt == t:
-                return False
-        return True
-
     def apply_add(t, i, k):
         nonlocal total
         sl = i * C + cls[k]
@@ -175,10 +169,6 @@ def main():
                 apply_add(t, i, k)
         recording[0] = True
 
-    def gain_of_add(t, i, k):
-        sl = i * C + cls[k]
-        return slot_value(i, cls[k], sorted(chain[sl] + [(t, k)])) - val[sl]
-
     def held_at(i, c, t):
         h = 0
         for dt, k in chain[i * C + c]:
@@ -193,11 +183,15 @@ def main():
     # so it is shared across all devices with the same triple.
     cache = {}
     MISSING = object()
-    # Ranking key w*(h - cur)/(s + alpha). alpha = 0 ranks by gain per megabyte,
-    # right while bandwidth is scarce; alpha -> infinity ranks by raw gain, right
-    # while the device budget is scarce. Neither extreme wins here, so the value
-    # is chosen per instance by trying a few and keeping the best plan.
+    # Two parameters. The slot's model is the frontier item maximising
+    # (h - cur)/(s + alpha): alpha = 0 is gain per megabyte, right while
+    # bandwidth is scarce; alpha -> infinity is raw gain, right while the device
+    # budget is scarce. Both bind here, so alpha is swept per instance. Once the
+    # model is fixed, slots are *ordered* by w*(h - cur)/(s + beta) with a
+    # smaller beta: with the selection made, sequencing is closer to a
+    # weighted-completion-time problem, where the ratio rule is optimal.
     ALPHA = [0.0]
+    BETA = [0.0]
 
     def best_candidate(i, c, t):
         cur = held_at(i, c, t)
@@ -212,7 +206,7 @@ def main():
                 ratio = (happy[k] - cur) / (size[k] + ALPHA[0])
                 if ratio > best_ratio:
                     best_ratio, best_k = ratio, k
-            hit = None if best_k < 0 else (best_k, best_ratio)
+            hit = None if best_k < 0 else (best_k, (happy[best_k] - cur) / (size[best_k] + BETA[0]))
             cache[key] = hit
         if hit is None:
             return None
@@ -227,7 +221,7 @@ def main():
                     best_ratio, best_k = r, kk
             if best_k < 0:
                 return None
-            k, ratio = best_k, best_ratio
+            k, ratio = best_k, (happy[best_k] - cur) / (size[best_k] + BETA[0])
         return k, ratio * weight[i][c]
 
     slot_gen = [0] * (S * C)
@@ -323,7 +317,6 @@ def main():
                     apply_add(t, i, k)
 
     live = [i * C + c for i in range(S) for c in range(C) if weight[i][c]]
-    n_live = len(live)
 
     def upgrade_pass():
         """Spend leftover bandwidth raising the happiness of rollouts already placed.
@@ -371,7 +364,8 @@ def main():
     # ---- construction: sweep the ranking parameter ------------------------
     mean_size = (sum(size) / U) if U else 1.0
     best_chain, best_build = None, -1
-    for factor in (0.0, 0.25, 0.5, 1.0, 2.0):
+    BETA[0] = BETA_FACTOR * mean_size
+    for factor in (0.5, 1.0, 1.5, 2.0):
         ALPHA[0] = factor * mean_size
         reset()
         cache.clear()
@@ -383,114 +377,64 @@ def main():
         if total > best_build:
             best_build, best_chain = total, snapshot()
             best_alpha = ALPHA[0]
+            best_beta = BETA[0]
         if time.time() - started > TIME_BUDGET * 0.5:
             break
     ALPHA[0] = best_alpha
+    BETA[0] = best_beta
     cache.clear()
     restore(best_chain)
-    build_done = time.time()
 
-    # ---- annealing on top, with the journal marking the incumbent ----------
+    # ---- ruin & recreate on top ---------------------------------------------
+    # Single-rollout moves cannot improve a saturated schedule (every day is
+    # full until the budgets run out), so the search frees a random region --
+    # the rollouts of a few devices, of one house, or of a window of days --
+    # and lets the greedy refill it, keeping the result when it is no worse.
+    # The refill runs with alpha and beta jittered around the swept optimum;
+    # without that the greedy mostly rebuilds what it tore down.
     rng = random.Random(12345)
-    n_roll = sum(len(x) for x in chain)
-    avg_roll = total / n_roll if n_roll else 1.0
-    t_hot = max(1.0, avg_roll * 0.10)
-    t_cold = max(0.001, avg_roll * 0.005)
-    ratio_tc = t_cold / t_hot
-    exp = __import__("math").exp
-    best_total = total
-    best_mark = 0
     recording[0] = True
-
-    CYCLES = 6
-    remaining = TIME_BUDGET - (build_done - started)
-    cycle_len = remaining / CYCLES if remaining > 0 else 0.0
-    for cycle in range(CYCLES):
-        if cycle:
-            rollback_to(best_mark)
-            journal.clear()
-            best_mark = 0
-        cycle_start = time.time()
-        if cycle_start - started >= TIME_BUDGET:
-            break
-        while True:
-            now = time.time()
-            frac = (now - cycle_start) / cycle_len if cycle_len else 1.0
-            if frac >= 1.0 or now - started >= TIME_BUDGET:
-                break
-            temp = t_hot * ratio_tc ** frac
-            for _ in range(300):
-                sl = live[rng.randrange(n_live)]
-                i, c = divmod(sl, C)
-                lst = chain[sl]
-                roll = rng.random()
-
-                if roll < 0.25 or not lst:                       # add
-                    t = int(rng.random() ** 2 * T)
-                    front = frontier[c][t]
-                    if not front:
-                        continue
-                    k = front[rng.randrange(len(front))]
-                    if not can_add(t, i, k):
-                        continue
-                    delta = gain_of_add(t, i, k)
-                    if delta > 0 or (delta / temp > -50.0
-                                     and rng.random() < exp(delta / temp)):
-                        apply_add(t, i, k)
-
-                elif roll < 0.40:                                # remove
-                    t, k = lst[rng.randrange(len(lst))]
-                    delta = slot_value(i, c, [x for x in lst if x != (t, k)]) - val[sl]
-                    if delta > 0 or (delta / temp > -50.0
-                                     and rng.random() < exp(delta / temp)):
+    best_total = total
+    n_iter = n_acc = 0
+    dev_rolls = lambda i: [(t, k) for c in range(C) for t, k in chain[i * C + c]]
+    by_house = [[] for _ in range(H)]
+    for i in range(S):
+        by_house[house[i]].append(i)
+    while time.time() - started < TIME_BUDGET:
+        n_iter += 1
+        mark = len(journal)
+        roll = rng.random()
+        if roll < 0.45:
+            victims = [rng.randrange(S) for _ in range(rng.randint(10, 40))]
+        elif roll < 0.7:
+            victims = list(by_house[rng.randrange(H)])
+            victims.extend(rng.randrange(S) for _ in range(5))
+        else:
+            t0 = rng.randrange(T)
+            days = set(range(t0, min(T, t0 + rng.randint(1, 3))))
+            victims = []
+            for i in range(S):
+                for t, k in dev_rolls(i):
+                    if t in days:
                         apply_remove(t, i, k)
-
-                elif roll < 0.75:                                # move to another day
-                    t, k = lst[rng.randrange(len(lst))]
-                    span = T - release[k]
-                    if span <= 0:
-                        continue
-                    nt = release[k] + int(rng.random() ** 2 * span)
-                    if nt == t:
-                        continue
-                    before = total
-                    apply_remove(t, i, k)
-                    if can_add(nt, i, k):
-                        apply_add(nt, i, k)
-                        delta = total - before
-                        if delta <= 0 and not (delta / temp > -50.0
-                                               and rng.random() < exp(delta / temp)):
-                            apply_remove(nt, i, k)
-                            apply_add(t, i, k)
-                    else:
-                        apply_add(t, i, k)
-
-                else:                                            # swap update
-                    t, k = lst[rng.randrange(len(lst))]
-                    front = frontier[c][t]
-                    if not front:
-                        continue
-                    nk = front[rng.randrange(len(front))]
-                    if nk == k:
-                        continue
-                    before = total
-                    apply_remove(t, i, k)
-                    if can_add(t, i, nk):
-                        apply_add(t, i, nk)
-                        delta = total - before
-                        if delta <= 0 and not (delta / temp > -50.0
-                                               and rng.random() < exp(delta / temp)):
-                            apply_remove(t, i, nk)
-                            apply_add(t, i, k)
-                    else:
-                        apply_add(t, i, k)
-
-                if total > best_total:
-                    best_total = total
-                    best_mark = len(journal)
-
-    rollback_to(best_mark)
+        for i in victims:
+            for t, k in dev_rolls(i):
+                apply_remove(t, i, k)
+        ALPHA[0] = best_alpha * rng.uniform(0.6, 1.6)
+        BETA[0] = best_beta * rng.uniform(0.6, 1.6)
+        cache.clear()
+        greedy_fill()
+        upgrade_pass()
+        if total >= best_total:
+            if total > best_total:
+                n_acc += 1
+            best_total = total
+            journal.clear()
+        else:
+            rollback_to(mark)
+    sys.stderr.write('build %d -> lns %d after %d iters, %d improvements\n' % (best_build, best_total, n_iter, n_acc))
     recording[0] = False
+    ALPHA[0], BETA[0] = best_alpha, best_beta
     cache.clear()
     greedy_fill()
 
