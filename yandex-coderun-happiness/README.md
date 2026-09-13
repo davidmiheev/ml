@@ -66,4 +66,4 @@ unreachable.
 | 3 | Две недели без доступов | 10 | relaxation-guided + greedy seeds, then annealing | ~99% of a 22x longer run |
 | 4 | Пятничный релиз | 20 | Pareto frontier + heap greedy, then annealing | ~98.5% of a 10x longer run |
 | 5 | The Last Dance | 25 | persistent-heap greedy, ranking parameter swept per instance | works; annealing ineffective at this size |
-| 6 | Наследие | 40 | | |
+| 6 | Наследие | 40 | grouped persistent-heap greedy (one heap entry per (class, held h, house limit) group), per-device class-budget plan, upgrade pass | works, valid; ~22s per instance, ~79% of the bandwidth-free bound on seed 0; tuning in progress |
