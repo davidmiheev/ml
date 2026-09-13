@@ -65,5 +65,5 @@ unreachable.
 | 2 | CDN на коленке | 5 | one rollout/day, devices by weight into earliest days | optimal |
 | 3 | Две недели без доступов | 10 | relaxation-guided + greedy seeds, then annealing | ~99% of a 22x longer run |
 | 4 | Пятничный релиз | 20 | Pareto frontier + heap greedy, then annealing | ~98.5% of a 10x longer run |
-| 5 | The Last Dance | 25 | | |
+| 5 | The Last Dance | 25 | persistent-heap greedy, ranking parameter swept per instance | works; annealing ineffective at this size |
 | 6 | Наследие | 40 | | |
