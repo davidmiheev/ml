@@ -52,6 +52,11 @@ saturates it -- there the solution sits at ~68% of the bound while being within
 a fraction of a percent of what a 20x longer search finds. Judge a scenario by
 the gap to a long run, and use the bound only to spot device-budget-bound cases.
 
+Scenario 4 shows the extreme: with the skewed house draw, one seed puts 33 of
+the 50 devices in a house with a 56 MB/day pipe -- 1680 MB of capacity against
+~9800 MB of demand -- so the plan reads as 42% of a bound that is physically
+unreachable.
+
 ## Status
 
 | # | Scenario | Points | Approach | State |
@@ -59,6 +64,6 @@ the gap to a long run, and use the bound only to spot device-budget-bound cases.
 | 1 | Проверка связи | — | single forced rollout, feasibility-checked | optimal |
 | 2 | CDN на коленке | 5 | one rollout/day, devices by weight into earliest days | optimal |
 | 3 | Две недели без доступов | 10 | relaxation-guided + greedy seeds, then annealing | ~99% of a 22x longer run |
-| 4 | Пятничный релиз | 20 | | |
+| 4 | Пятничный релиз | 20 | Pareto frontier + heap greedy, then annealing | ~98.5% of a 10x longer run |
 | 5 | The Last Dance | 25 | | |
 | 6 | Наследие | 40 | | |
