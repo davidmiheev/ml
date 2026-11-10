@@ -7,7 +7,9 @@ actually made the difference.
 
 | Competition | Year | Domain | Writeups covered | Notes |
 | --- | --- | --- | --- | --- |
-| *(first entries coming)* | | | | |
+| [NVIDIA Nemotron Model Reasoning Challenge](nvidia-nemotron-reasoning/) | 2026 | LLM reasoning, LoRA SFT | 1st–7th, 9th, 10th + Open Progress Prize; 4 repos checked | Deterministic solver traces; memorize-catalog-then-verify; bit-manipulation generator recovery |
+| [AI Agent Security: Multi-Step Tool Attacks](ai-agent-security-multi-step-tool-attacks/) | 2026 | Agent red-teaming | 1st, 2nd, 4th–7th (5th also won a Working Note award); 2 repos checked | Hidden-guardrail transfer; runtime side-channel probing; GCG for throughput |
+| [Hull Tactical: Market Prediction](hull-tactical-market-prediction/) | 2025–26 | Finance, live forecasting | 4th, 61st + key forum threads; no top-10 repos published | Leaky public LB by design; vol targeting over forecasting; few degrees of freedom |
 
 ## Layout
 
