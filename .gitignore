@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Competition data and outputs: download it, don't commit it
+kaggle/**/*.csv
+kaggle/**/*.zip
+kaggle/**/*.parquet
+*.tsv
+data/
+runs/
+models/
+outputs/
+
+# Secrets
+.env
+kaggle.json
